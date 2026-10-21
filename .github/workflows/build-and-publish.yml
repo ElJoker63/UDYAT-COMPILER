@@ -16,7 +16,7 @@ on:
 # Shared environment (Zero sensitive endpoints — completely driven by Secrets)
 # ─────────────────────────────────────────────────────────────────────────────
 env:
-  TAG_NAME: ${{ github.event.client_payload.tag || github.event.inputs.tag }}
+  TAG_NAME: ${{ github.event.client_payload.tag || github.event.client_payload.release.tag_name || github.event.inputs.tag }}
 
 permissions:
   contents: read
@@ -36,7 +36,7 @@ jobs:
     steps:
       - name: Clone source
         run: |
-          git -c http.sslVerify=false clone --depth 1 --branch "${{ env.TAG_NAME }}" "${{ secrets.SOURCE_REPO_URL }}" source
+          git -c http.sslVerify=false -c "http.extraHeader=Authorization: token ${{ secrets.RELEASE_TOKEN }}" clone --depth 1 --branch "${{ env.TAG_NAME }}" "${{ secrets.SOURCE_REPO_URL }}" source
         shell: bash
 
       - name: Setup Java 17
@@ -86,7 +86,7 @@ jobs:
     steps:
       - name: Clone source
         run: |
-          git -c http.sslVerify=false clone --depth 1 --branch "${{ env.TAG_NAME }}" "${{ secrets.SOURCE_REPO_URL }}" source
+          git -c http.sslVerify=false -c "http.extraHeader=Authorization: token ${{ secrets.RELEASE_TOKEN }}" clone --depth 1 --branch "${{ env.TAG_NAME }}" "${{ secrets.SOURCE_REPO_URL }}" source
         shell: bash
 
       - name: Setup Flutter
@@ -133,7 +133,7 @@ jobs:
 
       - name: Clone source
         run: |
-          git -c http.sslVerify=false clone --depth 1 --branch "${{ env.TAG_NAME }}" "${{ secrets.SOURCE_REPO_URL }}" source
+          git -c http.sslVerify=false -c "http.extraHeader=Authorization: token ${{ secrets.RELEASE_TOKEN }}" clone --depth 1 --branch "${{ env.TAG_NAME }}" "${{ secrets.SOURCE_REPO_URL }}" source
 
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
@@ -171,7 +171,7 @@ jobs:
     steps:
       - name: Clone source
         run: |
-          git -c http.sslVerify=false clone --depth 1 --branch "${{ env.TAG_NAME }}" "${{ secrets.SOURCE_REPO_URL }}" source
+          git -c http.sslVerify=false -c "http.extraHeader=Authorization: token ${{ secrets.RELEASE_TOKEN }}" clone --depth 1 --branch "${{ env.TAG_NAME }}" "${{ secrets.SOURCE_REPO_URL }}" source
 
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
@@ -214,7 +214,7 @@ jobs:
     steps:
       - name: Clone source
         run: |
-          git -c http.sslVerify=false clone --depth 1 --branch "${{ env.TAG_NAME }}" "${{ secrets.SOURCE_REPO_URL }}" source
+          git -c http.sslVerify=false -c "http.extraHeader=Authorization: token ${{ secrets.RELEASE_TOKEN }}" clone --depth 1 --branch "${{ env.TAG_NAME }}" "${{ secrets.SOURCE_REPO_URL }}" source
 
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
