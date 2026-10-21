@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Tag / version to build (e.g. v1.0.0)"
+        description: "Tag / version to build (e.g. v1.0.1)"
         required: true
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -28,10 +28,10 @@ permissions:
 jobs:
 
   # ───────────────────────────────────────────────────────────────────────────
-  # 1. Android (APK + AAB) — Ubuntu
+  # 1. Android (Split APKs & Universal) — Ubuntu
   # ───────────────────────────────────────────────────────────────────────────
   build-android:
-    name: "🤖 Android (APK & AAB)"
+    name: "🤖 Android (APKs)"
     runs-on: ubuntu-latest
     steps:
       - name: Clone source
@@ -51,18 +51,23 @@ jobs:
           channel: "stable"
           cache: true
 
-      - name: Build Android
+      - name: Build Split APKs (armv8, armv7, x86_64) (Obfuscated)
         working-directory: source
         run: |
           flutter pub get
-          flutter build apk --release
-          flutter build appbundle --release
+          flutter build apk --release --split-per-abi --obfuscate --split-debug-info=symbols/android
+
+      - name: Build Universal APK (Obfuscated)
+        working-directory: source
+        run: |
+          flutter build apk --release --obfuscate --split-debug-info=symbols/android
 
       - name: Prepare artifacts
         run: |
           mkdir -p artifacts
-          cp source/build/app/outputs/flutter-apk/app-release.apk    "artifacts/UDYAT-${{ env.TAG_NAME }}-android.apk"
-          cp source/build/app/outputs/bundle/release/app-release.aab  "artifacts/UDYAT-${{ env.TAG_NAME }}-android.aab"
+          cp source/build/app/outputs/flutter-apk/app-arm64-v8a-release.apk   "artifacts/udyat-armv8.apk"
+          cp source/build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk "artifacts/udyat-armv7.apk"
+          cp source/build/app/outputs/flutter-apk/app-release.apk             "artifacts/udyat-universal.apk"
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -90,19 +95,19 @@ jobs:
           channel: "stable"
           cache: true
 
-      - name: Build Windows
+      - name: Build Windows (Obfuscated)
         working-directory: source
         run: |
           flutter config --enable-windows-desktop
           flutter pub get
-          flutter build windows --release
+          flutter build windows --release --obfuscate --split-debug-info=symbols/windows
 
       - name: Package ZIP
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path artifacts
           Compress-Archive -Path "source\build\windows\x64\runner\Release\*" `
-            -DestinationPath "artifacts\UDYAT-${{ env.TAG_NAME }}-windows-x64.zip"
+            -DestinationPath "artifacts\udyat-windows.zip"
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -113,7 +118,7 @@ jobs:
           if-no-files-found: error
 
   # ───────────────────────────────────────────────────────────────────────────
-  # 3. Linux (x64 tar.gz) — Ubuntu
+  # 3. Linux (x64 ZIP) — Ubuntu
   # ───────────────────────────────────────────────────────────────────────────
   build-linux:
     name: "🐧 Linux (x64)"
@@ -124,7 +129,7 @@ jobs:
           sudo apt-get update -y
           sudo apt-get install -y clang cmake git ninja-build pkg-config \
             libgtk-3-dev liblzma-dev libstdc++-12-dev \
-            libmpv-dev mpv
+            libmpv-dev mpv zip
 
       - name: Clone source
         run: |
@@ -136,18 +141,18 @@ jobs:
           channel: "stable"
           cache: true
 
-      - name: Build Linux
+      - name: Build Linux (Obfuscated)
         working-directory: source
         run: |
           flutter config --enable-linux-desktop
           flutter pub get
-          flutter build linux --release
+          flutter build linux --release --obfuscate --split-debug-info=symbols/linux
 
-      - name: Package tar.gz
+      - name: Package ZIP
         run: |
           mkdir -p artifacts
-          tar -czf "artifacts/UDYAT-${{ env.TAG_NAME }}-linux-x64.tar.gz" \
-            -C source/build/linux/x64/release bundle
+          cd source/build/linux/x64/release/bundle
+          zip -r -9 "$GITHUB_WORKSPACE/artifacts/udyat-linux.zip" *
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -158,7 +163,7 @@ jobs:
           if-no-files-found: error
 
   # ───────────────────────────────────────────────────────────────────────────
-  # 4. macOS (Universal .app ZIP) — macOS
+  # 4. macOS (.app) — macOS
   # ───────────────────────────────────────────────────────────────────────────
   build-macos:
     name: "🍎 macOS"
@@ -174,18 +179,23 @@ jobs:
           channel: "stable"
           cache: true
 
-      - name: Build macOS
+      - name: Build macOS (Obfuscated)
         working-directory: source
         run: |
           flutter config --enable-macos-desktop
           flutter pub get
-          flutter build macos --release
+          flutter build macos --release --obfuscate --split-debug-info=symbols/macos
 
-      - name: Package ZIP
+      - name: Prepare macOS Application (udyat-macOS.app)
         run: |
           mkdir -p artifacts
           cd source/build/macos/Build/Products/Release
-          zip -r -y "$GITHUB_WORKSPACE/artifacts/UDYAT-${{ env.TAG_NAME }}-macos.zip" "UDYAT.app"
+          APP_DIR="UDYAT.app"
+          if [ ! -d "$APP_DIR" ]; then
+            APP_DIR="Runner.app"
+          fi
+          # Empaquetar la aplicación nativa directamente como udyat-macOS.app preservando symlinks
+          zip -r -y -9 "$GITHUB_WORKSPACE/artifacts/udyat-macOS.app" "$APP_DIR"
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -196,10 +206,10 @@ jobs:
           if-no-files-found: error
 
   # ───────────────────────────────────────────────────────────────────────────
-  # 5. iOS (.app unsigned ZIP) — macOS
+  # 5. iOS (.ipa unsigned for sideloading) — macOS
   # ───────────────────────────────────────────────────────────────────────────
   build-ios:
-    name: "📱 iOS (unsigned)"
+    name: "📱 iOS (IPA)"
     runs-on: macos-latest
     steps:
       - name: Clone source
@@ -212,17 +222,19 @@ jobs:
           channel: "stable"
           cache: true
 
-      - name: Build iOS (no codesign)
+      - name: Build iOS (No Codesign, Obfuscated)
         working-directory: source
         run: |
           flutter pub get
-          flutter build ios --release --no-codesign
+          flutter build ios --release --no-codesign --obfuscate --split-debug-info=symbols/ios
 
-      - name: Package unsigned .app
+      - name: Package IPA for Sideloading
         run: |
           mkdir -p artifacts
           cd source/build/ios/iphoneos
-          zip -r -y "$GITHUB_WORKSPACE/artifacts/UDYAT-${{ env.TAG_NAME }}-ios-unsigned.zip" "Runner.app"
+          mkdir -p Payload
+          cp -r Runner.app Payload/
+          zip -r -9 "$GITHUB_WORKSPACE/artifacts/udyat-ios.ipa" Payload
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -233,10 +245,10 @@ jobs:
           if-no-files-found: error
 
   # ═══════════════════════════════════════════════════════════════════════════
-  # PUBLISH — Collect all artifacts, push Release, and purge from GitHub
+  # PUBLISH — Collect all artifacts, push Release to Gitea, and purge from GitHub
   # ═══════════════════════════════════════════════════════════════════════════
   publish-release:
-    name: "🚀 Publish Release"
+    name: "🚀 Publish Release to Gitea"
     needs: [build-android, build-windows, build-linux, build-macos, build-ios]
     runs-on: ubuntu-latest
     steps:
@@ -307,7 +319,7 @@ jobs:
           echo "✅ Tag cleanup done"
         shell: bash
 
-      # ── Create new Release ──
+      # ── Create new Release on Gitea ──
       - name: Create Release
         id: create_release
         run: |
@@ -315,7 +327,7 @@ jobs:
           ENDPOINT="${{ secrets.RELEASE_ENDPOINT }}"
           TOKEN="${{ secrets.RELEASE_TOKEN }}"
 
-          BODY="## UDYAT — Streaming Multimedia ($TAG)\n\n### 📦 Descargas Disponibles:\n- 📱 **Android APK**: Instalación directa para teléfonos, tablets y Android TV.\n- 📦 **Android App Bundle (AAB)**: Para publicación en tiendas.\n- 🪟 **Windows (x64)**: Ejecutable portable para Windows 10/11.\n- 🐧 **Linux (x64)**: Binario nativo empaquetado.\n- 🍎 **macOS**: Aplicación nativa (.app).\n- 📱 **iOS**: Build sin firmar (.app).\n\n---\n*Compilado automáticamente desde tag \`$TAG\` usando GitHub Actions.*"
+          BODY="## UDYAT — Streaming Multimedia ($TAG)\n\n### 📦 Descargas Oficiales:\n- 📱 **Android ARMv8 (64-bit)**: \`udyat-armv8.apk\` (Móviles y tablets modernos).\n- 📺 **Android ARMv7 (32-bit)**: \`udyat-armv7.apk\` (Fire TV Stick Lite / 3rd Gen, Android TV 32-bit).\n- 🌐 **Android Universal**: \`udyat-universal.apk\` (Compatible con cualquier dispositivo Android).\n- 🍎 **iOS Package**: \`udyat-ios.ipa\` (Sideloading con AltStore, Sideloadly, TrollStore, Scarlet).\n- 🪟 **Windows (x64)**: \`udyat-windows.zip\` (Portable para Windows 10 y Windows 11).\n- 🍏 **macOS**: \`udyat-macOS.app\` (Aplicación nativa UDYAT.app).\n- 🐧 **Linux (x64)**: \`udyat-linux.zip\` (Binario nativo para Linux).\n\n---\n*Compilado y publicado automáticamente mediante UDYAT-COMPILER para tag \`$TAG\`.*"
 
           RESPONSE=$(curl -k -s -X POST \
             -H "Authorization: token $TOKEN" \
@@ -333,7 +345,7 @@ jobs:
           echo "✅ Created release ID: $RELEASE_ID"
         shell: bash
 
-      # ── Upload all assets to the Release ──
+      # ── Upload all assets to the Gitea Release ──
       - name: Upload assets to Release
         run: |
           ENDPOINT="${{ secrets.RELEASE_ENDPOINT }}"
@@ -358,7 +370,7 @@ jobs:
             fi
           done
 
-          echo "🎉 All assets uploaded successfully!"
+          echo "🎉 All assets uploaded successfully to Gitea!"
         shell: bash
 
       # ── Purge all temporary build artifacts from GitHub immediately ──
