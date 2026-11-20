@@ -55,12 +55,12 @@ jobs:
         working-directory: source
         run: |
           flutter pub get
-          flutter build apk --release --split-per-abi --obfuscate --split-debug-info=symbols/android
+          flutter build apk --release --split-per-abi --obfuscate --split-debug-info=symbols/android --android-skip-build-dependency-validation
 
       - name: Build Universal APK (Obfuscated)
         working-directory: source
         run: |
-          flutter build apk --release --obfuscate --split-debug-info=symbols/android
+          flutter build apk --release --obfuscate --split-debug-info=symbols/android --android-skip-build-dependency-validation
 
       - name: Prepare artifacts
         run: |
